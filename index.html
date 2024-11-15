@@ -3,16 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fancy CTRLgantt</title>
+    <title>Interactive Gantt Chart</title>
     <script src="https://d3js.org/d3.v5.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
     <style>
         body {
-            font-family: 'Roboto', sans-serif;
-            background-color: #f4f4f9;
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
             margin: 0;
             padding: 20px;
-            color: #333;
         }
         .header {
             text-align: center;
@@ -60,8 +58,8 @@
             cursor: pointer;
             background-color: #f0f0f0;
             font-size: 14px;
-            max-width: calc(33.33% - 10px);
         }
+
         .category-button.selected {
             background-color: #007bff;
             color: white;
@@ -86,9 +84,6 @@
             stroke: orange;
             stroke-width: 2px;
         }
-        .axis text {
-            font: 12px 'Roboto', sans-serif;
-        }
         .tooltip {
             position: absolute;
             text-align: center;
@@ -102,10 +97,18 @@
             transition: opacity 0.2s;
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
         }
+        .highlighted-day {
+            fill: lightgreen;
+            opacity: 0.3; /* Make it a faint highlight */
+        }
         .current-time-line {
-            stroke: red;
+            stroke: darkgreen;
             stroke-width: 2;
-            stroke-dasharray: 4;
+            stroke-dasharray: 5, 5; /* Dotted line */
+        }
+        #datePicker {
+            background-color: #d3f9d8;
+            border: 1px solid #ccc;
         }
     </style>
 </head>
@@ -244,17 +247,18 @@
             svg.selectAll(".axis").remove();
             svg.selectAll(".bar").remove();
             svg.selectAll(".row-bg").remove();
+            svg.selectAll(".highlighted-day").remove();
             svg.selectAll(".current-time-line").remove();
 
             // Redraw the x and y axes
-            const xAxisGroup = svg.append("g")
-                .attr("transform", `translate(0,${height})`) // Position the x-axis at the bottom
-                .attr("class", "x axis");
-            xAxisGroup.call(xAxis);
+            svg.append("g")
+                .attr("transform", `translate(0,${height})`)
+                .attr("class", "x axis")
+                .call(xAxis);
 
-            const yAxisGroup = svg.append("g")
-                .attr("class", "y axis");
-            yAxisGroup.call(yAxis);
+            svg.append("g")
+                .attr("class", "y axis")
+                .call(yAxis);
 
             // Draw background rows
             svg.selectAll(".row-bg")
@@ -267,6 +271,15 @@
                 .attr("height", y.bandwidth())
                 .attr("fill", (d, i) => i % 2 ? "#f9f9f9" : "#ffffff");
 
+            // Add highlight for the selected day
+            const selectedDayX = x(startDate);
+            svg.append("rect")
+                .attr("class", "highlighted-day")
+                .attr("x", selectedDayX)
+                .attr("y", 0)
+                .attr("width", x(new Date(startDate.setDate(startDate.getDate() + 1))) - selectedDayX) // The width of one day
+                .attr("height", height);
+
             // Draw the bars (event items)
             svg.selectAll(".bar")
                 .data(filtered)
@@ -276,7 +289,12 @@
                 .attr("y", d => y(d.name))
                 .attr("width", d => x(d.end || new Date()) - x(d.start))
                 .attr("height", y.bandwidth())
-                .attr("fill", "steelblue")
+                .style("fill", "steelblue") // Set the default color
+                .on("click", function(event, d) {
+                    // Toggle the color between steelblue and green
+                    const currentColor = d3.select(this).style("fill");
+                    d3.select(this).style("fill", currentColor === "green" ? "steelblue" : "green");
+                })
                 .on("mouseover", function(event, d) {
                     tooltip.transition().duration(200).style("opacity", .9);
                     tooltip.html(`
@@ -291,21 +309,35 @@
                     tooltip.transition().duration(500).style("opacity", 0);
                 });
 
-            // Add current time line
-            const currentTimeX = x(currentDay);
+            // Add current time line (dark green dotted line)
+            const currentTime = new Date();
+            const currentTimeX = x(currentTime);
             svg.append("line")
                 .attr("class", "current-time-line")
                 .attr("x1", currentTimeX)
                 .attr("y1", 0)
                 .attr("x2", currentTimeX)
                 .attr("y2", height);
+
+            // Update the current time line every second
+            setInterval(() => {
+                const currentTime = new Date();
+                const currentTimeX = x(currentTime);
+                svg.selectAll(".current-time-line").remove();
+                svg.append("line")
+                    .attr("class", "current-time-line")
+                    .attr("x1", currentTimeX)
+                    .attr("y1", 0)
+                    .attr("x2", currentTimeX)
+                    .attr("y2", height);
+            }, 1000); // Update every second
         }
 
         // Change date using arrows
         function changeDay(direction) {
             currentDay.setDate(currentDay.getDate() + direction);
             document.getElementById("datePicker").value = d3.timeFormat("%Y-%m-%d")(currentDay);
-            updateEventButtonsAndChart(data); // Refactor to filter buttons and chart after the change
+            updateEventButtonsAndChart(data);
         }
 
         // Select date using the date picker or day range
